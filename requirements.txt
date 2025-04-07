@@ -1,0 +1,4 @@
+numpy
+pandas
+scikit-learn
+git+ssh://git@github.com/courtois-neuromod/mario.scenes.git@main#egg=mario.scenes

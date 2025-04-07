@@ -1,0 +1,10 @@
+Metadata-Version: 2.1
+Name: tqdm_joblib
+Version: 0.0.4
+Summary: Tracking progress of joblib.Parallel execution
+Home-page: https://stackoverflow.com/a/58936697/5133167
+Author: Louis Abraham
+Author-email: louis.abraham@yahoo.fr
+License: CC BY-SA 4.0
+Requires-Dist: tqdm
+
