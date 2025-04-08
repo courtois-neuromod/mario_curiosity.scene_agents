@@ -1,8 +1,0 @@
-Processing Log
-=================
-Total bk2 files: 613
-Total clips processed: 9489
-Total clips skipped: 0
-Total errors: 0
-
-Error Details:
