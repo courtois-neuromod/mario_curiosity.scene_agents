@@ -1,1 +1,4 @@
- sourcedata/*
+sourcedata/
+
+*.state
+*.pt
