@@ -14,12 +14,15 @@ import mario_scenes
 
 sys.path.append(os.path.join(os.getcwd()))
 
-from src.ppo import PPO
 
-from functions import process_state
-from functions import get_models, parse_state_files, filter_states, get_mastersheet, get_scene, get_xpos_max, get_previous_frames
+
+from load_data import get_mastersheet, get_models, parse_state_files
+from utils import process_state, filter_states
+
+
 from src.ppo.env import preprocess_frames, complex_movement_to_button_presses
 from src.ppo.emulation import add_unused_buttons
+from src.ppo import PPO
 
 def main(args):
 

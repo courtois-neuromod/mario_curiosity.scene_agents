@@ -1,4 +1,5 @@
 sourcedata/
+scene_agents_env/
 
 *.state
 *.pt
