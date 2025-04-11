@@ -11,7 +11,7 @@ import retro
 
 from src.ppo.env import preprocess_frames, complex_movement_to_button_presses
 from src.ppo.emulation import add_unused_buttons
-from src.ppo import PPO
+from src.models import PPO
 
 from load_data import get_mastersheet, get_models, parse_state_files, get_scene, get_xpos_max
 
@@ -107,33 +107,30 @@ def mp4_to_list(mp4_filepath, start_frame, num_frames):
 
     return frames
 
-def process_state(row_state, ppo_row, info_scene):
+def process_state(row_state, ppo_row, info_scene, stimuli, verbose=False):
 
     state = row_state['state_path']
+
     sub = row_state['sub']
     ses = row_state['ses']
     model  = ppo_row['loaded_models']
-    print('state', state)
 
-    path_output = os.path.join(os.getcwd(), 'outputdata', ppo_row['name_models'], sub, ses, 'beh', 'bk2')
+    path_output = os.path.join(os.getcwd(), 'outputdata', ppo_row['name_models'].split('.')[0], sub, ses, 'beh')
 
-    if not os.path.exists(path_output):
-        # Create the directory if it doesn't exist
-            os.makedirs(path_output, exist_ok=True)
+
+    os.makedirs(path_output, exist_ok=True)
 
     scene = get_scene(state)
     max_xscroll = get_xpos_max(info_scene, scene)
 
     # Setup the environments with Mario
-    integration_path = '.'
-    resolved_path = Path(integration_path).resolve()
+    resolved_path = Path(stimuli).resolve()
     retro.data.Integrations.add_custom_path(resolved_path)
-    print(resolved_path)
     
     emul = retro.make(game='SuperMarioBros-Nes', 
-                      state=state, 
                       inttype=retro.data.Integrations.CUSTOM_ONLY, 
                       record=path_output)
+    emul.load_state(state)
     emul.reset()
 
     context_frames = get_previous_frames(state)
@@ -159,7 +156,8 @@ def process_state(row_state, ppo_row, info_scene):
             probs = softmax(logits, axis=1)
             actions = [rng.choice(np.arange(12), p=p) for p in probs]
             actions = [complex_movement_to_button_presses(a) for a in actions]
-            print(actions)
+            if verbose:
+                print("Actions : ", actions)
             act = actions[0].tolist()
             a = add_unused_buttons(act)
             print(a)
@@ -184,3 +182,7 @@ def process_state(row_state, ppo_row, info_scene):
                     done = True
                 
         n_frames += 1
+
+    #bk2_fname = f'{state.split("/")[-1].replace(".state", "-000000.bk2")}'
+    #new_bk2_path = os.path.join(path_output, bk2_fname)
+    #os.rename(emul.get_bk2_path(), new_bk2_path)

@@ -42,17 +42,13 @@ def parse_state_files(states_path):
 
     """Load the states from the derivatives folder with additional info (sub, ses)."""
 
-    base_folder = Path(states_path)
-
-    if not base_folder.exists():
-        print(f"Target folder does not exist: {base_folder}")
+    if not states_path.exists():
+        print(f"Target folder does not exist: {states_path}")
         return pd.DataFrame(columns=['state_path', 'sub', 'ses', 'level', 'scene'])
     
-    #base_folder = Path(os.path.join(path_stats, "source_data", states))
-
     else :
-        print(f"Loading states from {base_folder}")
-        state_files = list(base_folder.glob("sub*/ses*/beh/savestates/*.state"))
+        print(f"Loading states from {states_path}")
+        state_files = list(states_path.glob("sub*/ses*/beh/savestates/*.state"))
 
         data = []
         for file in state_files:
