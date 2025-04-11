@@ -1,16 +1,10 @@
 import os
 import sys
-import retro
+import h5py
 import numpy as np
-from pathlib import Path
-import matplotlib.pyplot as plt
-from tqdm import tqdm
-import torch
-from scipy.special import softmax
-import pandas as pd
 import argparse
+from pathlib import Path
 
-import mario_scenes
 
 sys.path.append(os.path.join(os.getcwd()))
 
@@ -20,30 +14,45 @@ from load_data import get_mastersheet, get_models, parse_state_files
 from utils import process_state, filter_states
 
 
-from src.ppo.env import preprocess_frames, complex_movement_to_button_presses
-from src.ppo.emulation import add_unused_buttons
-from src.ppo import PPO
-
 def main(args):
 
     models_ppo = get_models(args.models)
-    states = parse_state_files(args.datapath)
+    states = parse_state_files(Path(args.datapath).resolve())   
 
     filters = {
-        'sub': args.sub,
-        'ses': args.ses,
-        'level': args.level,
-        'scene': args.scene
+        'sub': args.subjects,
+        'ses': args.sessions,
+        'level': args.levels,
+        'scene': args.scenes
     }
+
 
     filtered_states = filter_states(states, filters)
     info_scenes = get_mastersheet(args.mastersheet)
 
-    for i, ppo_row in models_ppo.iterrows():
-        for y , state_row in filtered_states.iterrows():
-            process_state(state_row, ppo_row, info_scenes)
-            break
-        break
+    h5_path = os.path.join(args.output, "bk2.h5")
+    with h5py.File(h5_path, "a") as h5f:
+
+        for i, ppo_row in models_ppo.iterrows():
+            session_grp = h5f.create_group(f"model_{ppo_row['name_models']}")
+            for y , state_row in filtered_states.iterrows():
+
+                process_state(state_row, ppo_row, info_scenes, args.stimuli, verbose=args.verbose)
+                bk2_path = os.path.join(args.output, ppo_row["name_models"], state_row["sub"], state_row["ses"], "beh", "bk2", 'SuperMarioBros-Nes-'+state_row["state_path"].split('/')[-1].replace('.state', '-000000.bk2'))
+                print(bk2_path)
+
+                with open(bk2_path, "rb") as f:
+                    print('f:', f)
+                    bk2_data = f.read()
+                    print('bk2_data:', bk2_data)
+
+                bk2_bytes = np.frombuffer(bk2_data, dtype=np.uint8)
+                session_grp.create_dataset(bk2_path, data=bk2_bytes, compression="gzip")
+                session_grp.attrs["model"] = ppo_row["name_models"]
+                session_grp.attrs["state"] = state_row["state_path"]
+
+                os.remove(bk2_path)  # Nettoyage
+
 
 
 if __name__ == "__main__":
@@ -56,7 +65,7 @@ if __name__ == "__main__":
         help="Data path to look for the mastersheet and .state files. Should be the root of the Mario dataset.",
     )
     parser.add_argument(
-        "-m",
+        "-md",
         "--models",
         default= os.path.join('sourcedata', 'models'),
         type=str,
@@ -77,46 +86,45 @@ if __name__ == "__main__":
         help="Path to the derivatives folder, where the outputs will be saved.",
     )
     parser.add_argument(
-        "-sp",
+        "-st",
         "--stimuli",
         default=None,
         type=str,
         help="Path to the stimuli folder containing the game ROMs. Defaults to <datapath>/stimuli if not specified.",
     )
-    parser.add_argument(
-        "-n",
-        "--n_jobs",
-        default=1,
-        type=int,
-        help="Number of CPU cores to use for parallel processing.",
-    )
-    parser.add_argument(
-        '--subjects', 
-        '-sub', 
+    parser.add_argument( 
+        '-sub',
+        '--subjects',
         nargs='+',
         default=None,
         help='List of subjects to process (e.g., sub-01 sub-02). If not specified, all subjects are processed.'
     )
-    parser.add_argument(
-        '--sessions', 
-        '-ses', 
+    parser.add_argument( 
+        '-ses',
+        '--sessions',
         nargs='+', 
         default=None,
         help='List of sessions to process (e.g., ses-001 ses-002). If not specified, all sessions are processed.'
     )
-    parser.add_argument(
-        '--levels', 
+    parser.add_argument( 
         '-l', 
+        '--levels',
         nargs='+', 
         default=None,
-        help='List of level to process (e.g., w1l1 w1l2). If not specified, all sessions are processed.'
+        help='List of levels to process (e.g., w1l1 w1l2). If not specified, all sessions are processed.'
+    )
+    parser.add_argument( 
+        '-scn',
+        '--scenes',
+        nargs='+', 
+        default=None,
+        help='List of scenes to process (e.g., scene-1 scene-2). If not specified, all sessions are processed.'
     )
     parser.add_argument(
-        '--sessions', 
-        '-ses', 
-        nargs='+', 
-        default=None,
-        help='List of sessions to process (e.g., scene-1 scene-2). If not specified, all sessions are processed.'
+        '-v',
+        '--verbose',
+        action='store_true',
+        help='Enable verbose output.'
     )
 
     args = parser.parse_args()
