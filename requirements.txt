@@ -1,8 +1,16 @@
 numpy
 pandas
 torch
-imageio
+imageio-ffmpeg
 scipy
 stable-retro
+h5py
+
+# to add to ppo_study
+pytorch-lightning
+stable-retro
+scikit-learn
+#retrowrapper
+opencv-python
 
 git+ssh://git@github.com/courtois-neuromod/ppo_study.git@main#egg=src
