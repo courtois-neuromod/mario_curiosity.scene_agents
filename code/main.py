@@ -4,20 +4,34 @@ import h5py
 import numpy as np
 import argparse
 from pathlib import Path
+from tqdm.auto import tqdm
+from joblib import Parallel, delayed
+from tqdm_joblib import tqdm_joblib  # Import from the official tqdm-joblib package
 
 
 sys.path.append(os.path.join(os.getcwd()))
-
 
 
 from load_data import get_mastersheet, get_models, parse_state_files, get_scene, get_xpos_max
 from utils import process_state, filter_states
 
 
-def main(args):
+def process_single_state(row_state, ppo_row, info_scenes, args):
+    """Process a single state file with the given model."""
+    state = row_state['state_path']
+    sub = row_state['sub']
+    ses = row_state['ses']
+    model = ppo_row['loaded_models']
+    scene = get_scene(state)
+    x_max = get_xpos_max(info_scenes, scene)
+    path_output = os.path.join(args.output, ppo_row['name_models'].split('.')[0], sub, ses, 'beh')
+    
+    return process_state(state, args, model, x_max, path_output, args.stimuli, verbose=args.verbose)
 
+
+def main(args):
     models_ppo = get_models(args.models)
-    states = parse_state_files(Path(args.datapath).resolve())   
+    states = parse_state_files(Path(args.clipspath).resolve())   
 
     filters = {
         'sub': args.subjects,
@@ -26,56 +40,42 @@ def main(args):
         'scene': args.scenes
     }
 
-
     filtered_states = filter_states(states, filters)
     info_scenes = get_mastersheet(args.mastersheet)
 
-    h5_path = os.path.join(args.output, "bk2.h5")
-    with h5py.File(h5_path, "a") as h5f:
-
-        for i, ppo_row in models_ppo.iterrows():
-            session_grp = h5f.create_group(f"model_{ppo_row['name_models']}")
-            for y , row_state in filtered_states.iterrows():
-
-                state = row_state['state_path']
-                sub = row_state['sub']
-                ses = row_state['ses']
-                model  = ppo_row['loaded_models']
-                scene = get_scene(state)
-                x_max = get_xpos_max(info_scenes, scene)
-                path_output = os.path.join(args.output, ppo_row['name_models'].split('.')[0], sub, ses, 'beh')
-
-            
-                process_state(state, model, x_max, args.stimuli, path_output , verbose=args.verbose)
-
-                bk2_path = os.path.join(args.output, ppo_row["name_models"], row_state["sub"], row_state["ses"], "beh", "bk2", 'SuperMarioBros-Nes-'+row_state["state_path"].split('/')[-1].replace('.state', '-000000.bk2'))
-
-                with open(bk2_path, "rb") as f:
-                    print('f:', f)
-                    bk2_data = f.read()
-                    print('bk2_data:', bk2_data)
-
-                bk2_bytes = np.frombuffer(bk2_data, dtype=np.uint8)
-                session_grp.create_dataset(bk2_path, data=bk2_bytes, compression="gzip")
-                session_grp.attrs["model"] = ppo_row["name_models"]
-                session_grp.attrs["state"] = row_state["state_path"]
-
-                os.remove(bk2_path)  # Nettoyage
-
-                #bk2_fname = f'{state.split("/")[-1].replace(".state", "-000000.bk2")}'
-                #new_bk2_path = os.path.join(path_output, bk2_fname)
-                #os.rename(emul.get_bk2_path(), new_bk2_path)
-
+    for i, ppo_row in models_ppo.iterrows():
+        # Get all states to process with current model
+        states_to_process = [(y, row_state) for y, row_state in sorted(filtered_states.iterrows())]
+        
+        if args.verbose:
+            print(f"Processing {len(states_to_process)} states with model {ppo_row['name_models']}")
+        
+        # Create a progress bar description
+        desc = f"Processing model {ppo_row['name_models']}"
+        
+        # Use tqdm_joblib to create a progress bar for parallel processing
+        with tqdm_joblib(tqdm(total=len(states_to_process), desc=desc, disable=not args.verbose)) as progress_bar:
+            results = Parallel(n_jobs=args.n_jobs)(
+                delayed(process_single_state)(row_state, ppo_row, info_scenes, args) 
+                for _, row_state in states_to_process
+            )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Extract .state files from Mario dataset and information about the scenes")
     parser.add_argument(
-        "-d",
-        "--datapath",
-        default='sourcedata/',
+        "-cp",
+        "--clipspath",
+        default='sourcedata/scenes_clips',
         type=str,
-        help="Data path to look for the mastersheet and .state files. Should be the root of the Mario dataset.",
+        help="Data path to look for the .state files and .mp4. Should contain replays/ (for .mp4) and scene_clips (for .state)",
+    )
+    parser.add_argument(
+        "-rp",
+        "--replayspath",
+        default='sourcedata/replays',
+        type=str,
+        help="Data path to look for the .state files and .mp4. Should contain replays/ (for .mp4) and scene_clips (for .state)",
     )
     parser.add_argument(
         "-md",
@@ -89,7 +89,7 @@ if __name__ == "__main__":
         "--mastersheet",
         default= os.path.join('sourcedata', 'scenes_mastersheet.csv'),
         type=str,
-        help="Path to the models folder, where the PPO models are stored.",
+        help="Path to the mastersheet.",
     )
     parser.add_argument(
         "-o",
@@ -139,43 +139,13 @@ if __name__ == "__main__":
         action='store_true',
         help='Enable verbose output.'
     )
+    parser.add_argument(
+        '-j',
+        '--n_jobs',
+        type=int,
+        default=-1,
+        help='Number of parallel jobs. Default is -1 (use all available cores).'
+    )
 
     args = parser.parse_args()
-    
-
-args = parser.parse_args()
-main(args)
-
-
-
-
-
-""""
-def process_state(model, state, INFO_SCENES):
-    blabla process that stuff
-
-def main(args):
-    subjects = args.subjects
-    models = args.models
-    levels = args.levels
-    sourcedata_path = args.sourcedata_path
-    outputdata_path = args.outputdata_path
-
-    INFO_SCENES = get_mastersheet(path='/home/hugo/simexp/mario.scenes/resources/scenes_mastersheet.csv')
-
-    bk2_files = list(root_folder.rglob("*.bk2"))
-    
-    for subj in subjects:
-        for level in levels:
-            for model in models:
-                # Filter the list of bk2
-                bk2_files_filtered = [
-                    bk2_file for bk2_file in bk2_files
-                    if f"{subj}" in str(bk2_file) and f"{level}" in str(bk2_file)
-                ]
-                for bk2_file in bk2_files_filtered:
-                    # Process each file in the selected bk2s
-                    process_state(model, state, INFO_SCENES)
-
-
-"""
+    main(args)

@@ -34,7 +34,7 @@ def filter_states(states_df, filters):
     return states_df
 
 
-def get_previous_frames (state, prev_frames=-16):
+def get_previous_frames (state, args, prev_frames=-16):
     """
     Extrait les frames précédentes d'un état donné.
 
@@ -58,7 +58,7 @@ def get_previous_frames (state, prev_frames=-16):
 
     # get the mp4 filepath from bk2 filepath
     mp4_relative_path = bk2_filepath.replace('.bk2', '.mp4')
-    mp4_filepath = os.path.join('/home', 'hugo', 'github', 'mario.scenes', 'data', 'mario', 'derivatives', 'replays', mp4_relative_path)
+    mp4_filepath = os.path.join(args.replayspath, mp4_relative_path)
 
     return mp4_to_list(mp4_filepath, start_frame, prev_frames)
 
@@ -97,12 +97,12 @@ def mp4_to_list(mp4_filepath, start_frame, num_frames):
             print(f"Error reading frame {i}: {e}")
             break
     reader.close()
-    print(f"frames : {len(frames)}")
+    #print(f"frames : {len(frames)}")
     # Convertir les frames en uint8
 
     return frames
 
-def process_state(state_path, ppo, x_max, path_output, stimuli, verbose=False):
+def process_state(state_path, args, ppo, x_max, path_output, stimuli, verbose=False):
 
 
     os.makedirs(path_output, exist_ok=True)
@@ -114,11 +114,12 @@ def process_state(state_path, ppo, x_max, path_output, stimuli, verbose=False):
     
     emul = retro.make(game='SuperMarioBros-Nes', 
                       inttype=retro.data.Integrations.CUSTOM_ONLY, 
-                      record=path_output)
+                      record=path_output,
+                      render_mode=False)
     emul.load_state(state_path)
     emul.reset()
 
-    context_frames = get_previous_frames(state_path)
+    context_frames = get_previous_frames(state_path, args)
 
     rng = np.random.default_rng(seed=1)
     pred_rate = 4
@@ -126,7 +127,6 @@ def process_state(state_path, ppo, x_max, path_output, stimuli, verbose=False):
     done = False
 
     while not done:
-
         # Predict new actions
         if not n_frames % pred_rate:
             contexts_frames = [
@@ -146,12 +146,12 @@ def process_state(state_path, ppo, x_max, path_output, stimuli, verbose=False):
                 print("Actions : ", actions)
             act = actions[0].tolist()
 
-            if n_frames == 0:
-                lives = info['lives']
-                level_layout = info['level_layout']
 
         obs, _rew, _term, _trunc, info = emul.step(add_unused_buttons(act))
 
+        if n_frames == 0:
+            lives = info['lives']
+            level_layout = info['level_layout']
 
         context_frames.append(obs)
         done = _term
