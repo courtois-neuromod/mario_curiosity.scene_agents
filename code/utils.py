@@ -141,7 +141,7 @@ def process_state(state_path, ppo, x_max, path_output, stimuli, verbose=False):
             probs = softmax(logits, axis=1)
             actions = [rng.choice(np.arange(12), p=p) for p in probs]
             actions = [complex_movement_to_button_presses(a) for a in actions]
-            
+
             if verbose:
                 print("Actions : ", actions)
             act = actions[0].tolist()
@@ -167,7 +167,3 @@ def process_state(state_path, ppo, x_max, path_output, stimuli, verbose=False):
                 done = True
                 
         n_frames += 1
-
-    #bk2_fname = f'{state.split("/")[-1].replace(".state", "-000000.bk2")}'
-    #new_bk2_path = os.path.join(path_output, bk2_fname)
-    #os.rename(emul.get_bk2_path(), new_bk2_path)

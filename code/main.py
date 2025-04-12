@@ -37,7 +37,6 @@ def main(args):
             session_grp = h5f.create_group(f"model_{ppo_row['name_models']}")
             for y , row_state in filtered_states.iterrows():
 
-
                 state = row_state['state_path']
                 sub = row_state['sub']
                 ses = row_state['ses']
@@ -50,7 +49,6 @@ def main(args):
                 process_state(state, model, x_max, args.stimuli, path_output , verbose=args.verbose)
 
                 bk2_path = os.path.join(args.output, ppo_row["name_models"], row_state["sub"], row_state["ses"], "beh", "bk2", 'SuperMarioBros-Nes-'+row_state["state_path"].split('/')[-1].replace('.state', '-000000.bk2'))
-                print(bk2_path)
 
                 with open(bk2_path, "rb") as f:
                     print('f:', f)
@@ -63,6 +61,10 @@ def main(args):
                 session_grp.attrs["state"] = row_state["state_path"]
 
                 os.remove(bk2_path)  # Nettoyage
+
+                #bk2_fname = f'{state.split("/")[-1].replace(".state", "-000000.bk2")}'
+                #new_bk2_path = os.path.join(path_output, bk2_fname)
+                #os.rename(emul.get_bk2_path(), new_bk2_path)
 
 
 
