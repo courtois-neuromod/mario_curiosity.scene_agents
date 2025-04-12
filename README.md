@@ -26,7 +26,8 @@ cd mario.scenes
 python -m venv env
 source env/bin/activate
 pip install invoke
-cd env/lib/python3.10/site-packagesinvoke 
+invoke get-scenes-data
+cd env/lib/python3.10/site-packages
 git clone git@github.com:farama-foundation/stable-retro
 cd ../../../..
 pip install -e  env/lib/python3.10/site-packages/stable-retro/.
