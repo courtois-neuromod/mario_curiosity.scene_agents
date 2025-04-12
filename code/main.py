@@ -4,9 +4,13 @@ import h5py
 import numpy as np
 import argparse
 from pathlib import Path
+<<<<<<< HEAD
 from tqdm.auto import tqdm
 from joblib import Parallel, delayed
 from tqdm_joblib import tqdm_joblib  # Import from the official tqdm-joblib package
+=======
+from datetime import datetime
+>>>>>>> refs/remotes/origin/main
 
 
 sys.path.append(os.path.join(os.getcwd()))
@@ -28,8 +32,15 @@ def process_single_state(row_state, ppo_row, info_scenes, args):
     
     return process_state(state, args, model, x_max, path_output, args.stimuli, verbose=args.verbose)
 
+<<<<<<< HEAD
 
 def main(args):
+
+    now = datetime.now()
+
+    # Conversion en string
+    date_str = now.strftime("%Y-%m-%d_%H:%M-%S")
+
     models_ppo = get_models(args.models)
     states = parse_state_files(Path(args.clipspath).resolve())   
 
@@ -59,6 +70,7 @@ def main(args):
                 delayed(process_single_state)(row_state, ppo_row, info_scenes, args) 
                 for _, row_state in states_to_process
             )
+
 
 
 if __name__ == "__main__":
