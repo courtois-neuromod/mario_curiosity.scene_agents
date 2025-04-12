@@ -4,6 +4,7 @@ import h5py
 import numpy as np
 import argparse
 from pathlib import Path
+from datetime import datetime
 
 
 sys.path.append(os.path.join(os.getcwd()))
@@ -15,6 +16,12 @@ from utils import process_state, filter_states
 
 
 def main(args):
+
+    # Date et heure actuelles
+    now = datetime.now()
+
+    # Conversion en string
+    date_str = now.strftime("%Y-%m-%d_%H:%M-%S")
 
     models_ppo = get_models(args.models)
     states = parse_state_files(Path(args.datapath).resolve())   
@@ -29,8 +36,9 @@ def main(args):
 
     filtered_states = filter_states(states, filters)
     info_scenes = get_mastersheet(args.mastersheet)
+    nom_h5_output = date_str + ".h5"
 
-    h5_path = os.path.join(args.output, "bk2.h5")
+    h5_path = os.path.join(args.output, nom_h5_output)
     with h5py.File(h5_path, "a") as h5f:
 
         for i, ppo_row in models_ppo.iterrows():
@@ -45,26 +53,21 @@ def main(args):
                 x_max = get_xpos_max(info_scenes, scene)
                 path_output = os.path.join(args.output, ppo_row['name_models'].split('.')[0], sub, ses, 'beh')
 
-            
                 process_state(state, model, x_max, args.stimuli, path_output , verbose=args.verbose)
 
                 bk2_path = os.path.join(args.output, ppo_row["name_models"], row_state["sub"], row_state["ses"], "beh", "bk2", 'SuperMarioBros-Nes-'+row_state["state_path"].split('/')[-1].replace('.state', '-000000.bk2'))
 
                 with open(bk2_path, "rb") as f:
-                    print('f:', f)
                     bk2_data = f.read()
-                    print('bk2_data:', bk2_data)
 
                 bk2_bytes = np.frombuffer(bk2_data, dtype=np.uint8)
-                session_grp.create_dataset(bk2_path, data=bk2_bytes, compression="gzip")
+                bk2_new_path =bk2_path.replace('SuperMarioBros-Nes-', '')
+
+                session_grp.create_dataset(bk2_new_path, data=bk2_bytes, compression="gzip")
                 session_grp.attrs["model"] = ppo_row["name_models"]
                 session_grp.attrs["state"] = row_state["state_path"]
 
                 os.remove(bk2_path)  # Nettoyage
-
-                #bk2_fname = f'{state.split("/")[-1].replace(".state", "-000000.bk2")}'
-                #new_bk2_path = os.path.join(path_output, bk2_fname)
-                #os.rename(emul.get_bk2_path(), new_bk2_path)
 
 
 
