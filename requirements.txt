@@ -1,10 +1,15 @@
 numpy
 pandas
+invoke
 torch
+imageio
 imageio-ffmpeg
 scipy
 stable-retro
 h5py
+pytz
+six
+Pillow
 
 # to add to ppo_study
 pytorch-lightning
