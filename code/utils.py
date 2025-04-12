@@ -11,11 +11,6 @@ import retro
 
 from src.ppo.env import preprocess_frames, complex_movement_to_button_presses
 from src.ppo.emulation import add_unused_buttons
-from src.models import PPO
-
-from load_data import get_mastersheet, get_models, parse_state_files, get_scene, get_xpos_max
-
-
 
     
 def filter_states(states_df, filters):
@@ -107,21 +102,11 @@ def mp4_to_list(mp4_filepath, start_frame, num_frames):
 
     return frames
 
-def process_state(row_state, ppo_row, info_scene, stimuli, verbose=False):
-
-    state = row_state['state_path']
-
-    sub = row_state['sub']
-    ses = row_state['ses']
-    model  = ppo_row['loaded_models']
-
-    path_output = os.path.join(os.getcwd(), 'outputdata', ppo_row['name_models'].split('.')[0], sub, ses, 'beh')
+def process_state(state_path, ppo, x_max, path_output, stimuli, verbose=False):
 
 
     os.makedirs(path_output, exist_ok=True)
 
-    scene = get_scene(state)
-    max_xscroll = get_xpos_max(info_scene, scene)
 
     # Setup the environments with Mario
     resolved_path = Path(stimuli).resolve()
@@ -130,10 +115,10 @@ def process_state(row_state, ppo_row, info_scene, stimuli, verbose=False):
     emul = retro.make(game='SuperMarioBros-Nes', 
                       inttype=retro.data.Integrations.CUSTOM_ONLY, 
                       record=path_output)
-    emul.load_state(state)
+    emul.load_state(state_path)
     emul.reset()
 
-    context_frames = get_previous_frames(state)
+    context_frames = get_previous_frames(state_path)
 
     rng = np.random.default_rng(seed=1)
     pred_rate = 4
@@ -152,34 +137,34 @@ def process_state(row_state, ppo_row, info_scene, stimuli, verbose=False):
             frames_input = torch.tensor(
                     input_frames, dtype=torch.float32, device=torch.device('cpu')
                )
-            logits = model(frames_input)[0].detach().cpu().numpy()
+            logits = ppo(frames_input)[0].detach().cpu().numpy()
             probs = softmax(logits, axis=1)
             actions = [rng.choice(np.arange(12), p=p) for p in probs]
             actions = [complex_movement_to_button_presses(a) for a in actions]
+            
             if verbose:
                 print("Actions : ", actions)
             act = actions[0].tolist()
-            a = add_unused_buttons(act)
-            print(a)
-
-            obs, _rew, _term, _trunc, info = emul.step(add_unused_buttons(act))
 
             if n_frames == 0:
                 lives = info['lives']
                 level_layout = info['level_layout']
 
-            context_frames.append(obs)
-            done = _term
-            xscroll = 255 * int(info["player_x_posHi"]) + int(info["player_x_posLo"])
-            new_layout = info["level_layout"]
-            new_lives = info['lives']
+        obs, _rew, _term, _trunc, info = emul.step(add_unused_buttons(act))
 
-            if ( xscroll > max_xscroll 
-                or new_lives != lives
-                or new_layout != level_layout
-                or _trunc or _term
-                ):
-                    done = True
+
+        context_frames.append(obs)
+        done = _term
+        xscroll = 255 * int(info["player_x_posHi"]) + int(info["player_x_posLo"])
+        new_layout = info["level_layout"]
+        new_lives = info['lives']
+
+        if ( xscroll > x_max
+            or new_lives != lives
+            or new_layout != level_layout
+            or _trunc or _term
+            ):
+                done = True
                 
         n_frames += 1
 

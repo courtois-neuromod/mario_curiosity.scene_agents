@@ -10,7 +10,7 @@ sys.path.append(os.path.join(os.getcwd()))
 
 
 
-from load_data import get_mastersheet, get_models, parse_state_files
+from load_data import get_mastersheet, get_models, parse_state_files, get_scene, get_xpos_max
 from utils import process_state, filter_states
 
 
@@ -35,10 +35,21 @@ def main(args):
 
         for i, ppo_row in models_ppo.iterrows():
             session_grp = h5f.create_group(f"model_{ppo_row['name_models']}")
-            for y , state_row in filtered_states.iterrows():
+            for y , row_state in filtered_states.iterrows():
 
-                process_state(state_row, ppo_row, info_scenes, args.stimuli, verbose=args.verbose)
-                bk2_path = os.path.join(args.output, ppo_row["name_models"], state_row["sub"], state_row["ses"], "beh", "bk2", 'SuperMarioBros-Nes-'+state_row["state_path"].split('/')[-1].replace('.state', '-000000.bk2'))
+
+                state = row_state['state_path']
+                sub = row_state['sub']
+                ses = row_state['ses']
+                model  = ppo_row['loaded_models']
+                scene = get_scene(state)
+                x_max = get_xpos_max(info_scenes, scene)
+                path_output = os.path.join(args.output, ppo_row['name_models'].split('.')[0], sub, ses, 'beh')
+
+            
+                process_state(state, model, x_max, args.stimuli, path_output , verbose=args.verbose)
+
+                bk2_path = os.path.join(args.output, ppo_row["name_models"], row_state["sub"], row_state["ses"], "beh", "bk2", 'SuperMarioBros-Nes-'+row_state["state_path"].split('/')[-1].replace('.state', '-000000.bk2'))
                 print(bk2_path)
 
                 with open(bk2_path, "rb") as f:
@@ -49,7 +60,7 @@ def main(args):
                 bk2_bytes = np.frombuffer(bk2_data, dtype=np.uint8)
                 session_grp.create_dataset(bk2_path, data=bk2_bytes, compression="gzip")
                 session_grp.attrs["model"] = ppo_row["name_models"]
-                session_grp.attrs["state"] = state_row["state_path"]
+                session_grp.attrs["state"] = row_state["state_path"]
 
                 os.remove(bk2_path)  # Nettoyage
 
