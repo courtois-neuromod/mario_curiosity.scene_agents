@@ -36,7 +36,7 @@ pip install datalad
 invoke get-scenes-data
 export AWS_ACCESS_KEY_ID=<s3_access_key>  AWS_SECRET_ACCESS_KEY=<s3_secret_key>
 invoke setup-mario-dataset
-python src/mario_scenes/create_clips/create_clips.py -d sourcedata/mario --save_state
+python code/mario_scenes/create_clips/create_clips.py -d sourcedata/mario --save_state
 ```
 
 Then go back to scene_agents repo
