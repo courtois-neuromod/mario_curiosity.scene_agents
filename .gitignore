@@ -1,6 +1,7 @@
 sourcedata/*
 env/*
 outputdata/*
-
+*.egg-info/
+*.egg
 
 __pycache__/
