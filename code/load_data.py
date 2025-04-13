@@ -52,8 +52,13 @@ def parse_state_files(states_path):
 
         data = []
         for file in state_files:
-        
-            match = re.search(r"(sub-\d{2})_(ses-\d{3})_run-\d{2}_level-(\w{4})_(scene-\d{1,2})_clip-(\d+)_beh\.state", str(file))
+            #sub = file.split('/')[-1].split('_')[0].split('-')[1]
+            #ses = file.split('/')[-1].split('_')[1].split('-')[1]
+            #level = file.split('/')[-1].split('_')[3].split('-')[1]
+            #scene = file.split('/')[-1].split('_')[4].split('-')[1]
+            #num_clip = file.split('/')[-1].split('_')[5].split('-')[1]
+
+            match = re.search(r"(sub-\d{2})_(ses-\d{3})_run-\d{2}_level-(\w{4})_(scene-\d{1,2})_clip-(\d+)\.state", str(file))
 
             if match:
                 sub, ses, level, scene, num_clip = match.groups()

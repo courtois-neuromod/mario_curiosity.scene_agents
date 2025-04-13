@@ -10,7 +10,7 @@ from joblib import Parallel, delayed
 from tqdm_joblib import tqdm_joblib  # Import from the official tqdm-joblib package
 
 from datetime import datetime
-
+import os.path as op
 
 
 sys.path.append(os.path.join(os.getcwd()))
@@ -53,7 +53,7 @@ def main(args):
     filtered_states = filter_states(states, filters)
     info_scenes = get_mastersheet(args.mastersheet)
 
-    for i, ppo_row in models_ppo.iterrows():
+    for i, ppo_row in tqdm(models_ppo.iterrows()):
         # Get all states to process with current model
         states_to_process = [(y, row_state) for y, row_state in sorted(filtered_states.iterrows())]
         
@@ -157,6 +157,30 @@ if __name__ == "__main__":
         default=-1,
         help='Number of parallel jobs. Default is -1 (use all available cores).'
     )
-
+    parser.add_argument(
+        "--save_videos",
+        action="store_true",
+        help="Save the playback video file (.mp4).",
+    )
+    parser.add_argument(
+        "--save_variables",
+        action="store_true",
+        help="Save the variables file (.npz) that contains game variables.",
+    )
+    parser.add_argument(
+        "--save_states",
+        action="store_true",
+        help="Save full RAM state at each frame into a *_states.npy file.",
+    )
+    parser.add_argument(
+        "--save_ramdumps",
+        action="store_true",
+        help="Save RAM dumps at each frame into a *_ramdumps.npy file.",
+    )
+    parser.add_argument(
+        '--video_format', '-vf', default='mp4',
+        choices=['gif', 'mp4', 'webp'],
+        help='Video format to save (default: mp4).'
+    )
     args = parser.parse_args()
     main(args)
