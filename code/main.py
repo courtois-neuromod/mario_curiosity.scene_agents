@@ -48,7 +48,7 @@ def process_state(state_path, args, ppo, x_max, path_output, stimuli, verbose=Fa
     savestate_fname = op.join(beh_folder, 'savestates', f"{entities}.state")
     ramdump_fname   = op.join(beh_folder, 'ramdumps', f'{entities}.npz')
     json_fname      = op.join(beh_folder, 'infos', f"{entities}.json")
-    variables_fname = op.join(beh_folder, 'variables', f"{entities}.pkl")
+    variables_fname = op.join(beh_folder, 'variables', f"{entities}.json")
     bk2_fname       = op.join(beh_folder, 'bk2', f"{entities}.bk2")
     os.makedirs(os.path.dirname(bk2_fname), exist_ok=True)
 
@@ -118,7 +118,7 @@ def process_state(state_path, args, ppo, x_max, path_output, stimuli, verbose=Fa
                 done = True
                 
         n_frames += 1
-    
+
     scene_variables = reformat_info(info_list, keys_list, bk2_fname, buttons)
 
     # Generate json
@@ -151,12 +151,12 @@ def process_state(state_path, args, ppo, x_max, path_output, stimuli, verbose=Fa
             make_webp(frames_list, webp_fname)
     if args.save_ramdumps:
         os.makedirs(os.path.dirname(ramdump_fname), exist_ok=True)
-        np.savez_compressed(ramdump_fname, replay_states[start_idx:end_idx])
+        #np.savez_compressed(ramdump_fname, replay_states[start_idx:end_idx])
     if args.save_variables:
         os.makedirs(os.path.dirname(variables_fname), exist_ok=True)
-        with open(variables_fname, 'wb') as f:
-            pickle.dump(scene_variables, f)
-
+        with open(variables_fname, 'w') as f:  # Changed 'wb' to 'w' for text mode
+            json.dump(scene_variables, f)
+    
 
 def main(args):
 
@@ -202,14 +202,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "-cp",
         "--clipspath",
-        default='sourcedata/scenes_clips',
+        default=os.path.join('sourcedata', 'scene_clips'),
         type=str,
         help="Data path to look for the .state files and .mp4. Should contain replays/ (for .mp4) and scene_clips (for .state)",
     )
     parser.add_argument(
         "-rp",
         "--replayspath",
-        default='sourcedata/replays',
+        default=os.path.join('sourcedata', 'replays'),
         type=str,
         help="Data path to look for the .state files and .mp4. Should contain replays/ (for .mp4) and scene_clips (for .state)",
     )
