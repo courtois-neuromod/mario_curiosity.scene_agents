@@ -52,11 +52,6 @@ def parse_state_files(states_path):
 
         data = []
         for file in state_files:
-            #sub = file.split('/')[-1].split('_')[0].split('-')[1]
-            #ses = file.split('/')[-1].split('_')[1].split('-')[1]
-            #level = file.split('/')[-1].split('_')[3].split('-')[1]
-            #scene = file.split('/')[-1].split('_')[4].split('-')[1]
-            #num_clip = file.split('/')[-1].split('_')[5].split('-')[1]
 
             match = re.search(r"(sub-\d{2})_(ses-\d{3})_run-\d{2}_level-(\w{4})_(scene-\d{1,2})_clip-(\d+)\.state", str(file))
 
@@ -119,11 +114,8 @@ def get_xpos_max (ms, scene):
     Returns:
         int : Valeur maximale de player_x_pos pour la scène donnée.
     """
-
-    xpos_max = ms[(ms['World'] == int(scene[1])) & (ms['Level'] == int(scene[3])) & (ms['Scene'] == int(scene[5]))]['Exit point'].values
-
-    if xpos_max.size == 0:
-        print(f"Scene {scene} not found in the mastersheet.")
-        return None
+    ms.dropna(inplace=True)
+    ms['LevelFull'] = 'w' + ms['World'].astype(int).astype(str) + 'l' + ms['Level'].astype(int).astype(str) + 's' + ms['Scene'].astype(int).astype(str)
+    xpos_max = int(ms[ms['LevelFull'] == scene]['Exit point'].values)
 
     return  int(xpos_max)
