@@ -24,8 +24,6 @@ tqdm
 joblib
 tqdm_joblib
 datetime
-json
-pickle
 scipy
 re
 
