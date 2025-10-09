@@ -18,4 +18,15 @@ scikit-learn
 #retrowrapper
 opencv-python
 
+argparse
+pathlib
+tqdm
+joblib
+tqdm_joblib
+datetime
+json
+pickle
+scipy
+re
+
 git+ssh://git@github.com/courtois-neuromod/ppo_study.git@main#egg=src
