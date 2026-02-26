@@ -27,14 +27,31 @@ invoke setup-env will:
 - Install retrowrapper with few patchs
 
 # Get sourcedata
-To play with this repo you need the sourcedata. You can get them with the [mario.scenes](https://github.com/courtois-neuromod/mario.scenes) and [mario.replays](https://github.com/courtois-neuromod/mario.replays) repos.
 
+To play with this repo you need the sourcedata. You can get them with the [mario.scenes](https://github.com/courtois-neuromod/mario.scenes) and [mario.replays](https://github.com/courtois-neuromod/mario.replays) repos, as well with the invoke functions. For the two repo, we recommende you to clone them outside of mario_curiosity.scene_agents
 
+## Scenes data 
+```
+invoke get-scenes-data
+```
+## Get ROM folder
 
+```
+invoke get-mario-game
+```
 
+## mario.replays
 
+For a quick start on [mario.replays](https://github.com/courtois-neuromod/mario.replays) go check the [README.md](https://github.com/courtois-neuromod/mario.replays/blob/main/README.md). You will only need the videos replay (.mp4) from this repo. Once you are done with the setup, use:
+```
+invoke create-replays --save-videos --output <path_to_mario_curiosity.scene_agents_sourcedata/>
+``` 
+## mario.scenes
 
-
+Form the [mario.scenes](https://github.com/courtois-neuromod/mario.scenes) repository, you will only need saved states (.state) files. Once your setup in done for this repository, see [README.md](https://github.com/courtois-neuromod/mario.scenes/blob/main/README.md), run:
+```
+invoke create-clips --save-states --output <path_to_mario_curiosity.scene_agents_sourcedata/>
+```
 
 ## Instructructions to start on compute canada
 

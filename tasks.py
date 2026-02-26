@@ -29,3 +29,44 @@ def setup_env(c):
         "pip install -e . && "
         "cd ../../../../.."
     )
+
+@task
+def get_scenes_data(c):
+    """📊 Download scene metadata and background images from Zenodo.
+
+    Downloads and extracts:
+    - scenes_mastersheet.csv: Scene boundary definitions and layouts
+    - scenes_mastersheet.json: Same data in JSON format
+    - mario_scenes_manual_annotation.pdf: Annotation documentation
+    - level_backgrounds/: Background images for each level
+    - scene_backgrounds/: Background images for individual scenes
+
+    All files are saved to sourcedata/scenes_info/ and sourcedata/*_backgrounds/.
+
+    Parameters
+    ----------
+    c : invoke.Context
+        The Invoke context object.
+
+    Examples
+    --------
+    ```bash
+    invoke get-scenes-data
+    ```
+
+    Notes
+    -----
+    This must be run before other analysis tasks that depend on scene definitions.
+    Downloads from Zenodo record 15586709.
+    """
+    c.run("mkdir -p sourcedata/scenes_info")
+    c.run(
+        'wget "https://zenodo.org/records/15586709/files/mario_scenes_manual_annotation.pdf?download=1" -O sourcedata/scenes_info/mario_scenes_manual_annotation.pdf'
+    )
+    c.run(
+        'wget "https://zenodo.org/records/15586709/files/scenes_mastersheet.json?download=1" -O sourcedata/scenes_info/scenes_mastersheet.json'
+    )
+    c.run(
+        'wget "https://zenodo.org/records/15586709/files/scenes_mastersheet.csv?download=1" -O sourcedata/scenes_info/scenes_mastersheet.csv'
+    )
+
