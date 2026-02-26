@@ -1,6 +1,41 @@
 # mario_curiosity.scene_agents
 This repository contains scripts that uses artificial agents to play scenes of Super Mario Bros. from human savestates.
 
+# Installation instructions
+
+## Clone of the git repo
+```
+git clone git@github.com:courtois-neuromod/mario_curiosity.scene_agents.git
+cd mario_curiosity.scene_agents
+```
+
+## Check Python version
+Use `python3 --version` to check the current python version you are using. If it is not 3.10, you need to install it and set it as local version with:
+```
+pyenv install 3.10.14
+pyenv local 3.10.14
+```
+## Setup venv
+```
+pip install invoke
+invoke setup-env
+```
+invoke setup-env will:
+
+- Create a virtual environment in ./env/
+- Install the mario_curiosity.scene_agents package in editable mode
+- Install retrowrapper with few patchs
+
+# Get sourcedata
+To play with this repo you need the sourcedata. You can get them with the [mario.scenes](https://github.com/courtois-neuromod/mario.scenes) and [mario.replays](https://github.com/courtois-neuromod/mario.replays) repos.
+
+
+
+
+
+
+
+
 ## Instructructions to start on compute canada
 
 Go into the scratch
@@ -69,38 +104,4 @@ pip install -r requirements_for_beluga.txt
 pip install -e .
 ```
 
-
-
-
-
-
-
-
-## Installation instructions
-
-First, make sure you have Python 3.10 installed.
-```
-python --version
-```
-or 
-```
-python3 --version
-```
-If these lines return Python 3.10 we're good to go.
-
-Else, we suggest installing pyenv to manage several Python versions, and select Python 3.10 for the local directory : 
-```
-
-```
-
-Create environment :
-```
-python -m venv env
-source env/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
-pip install -e .
-```
-
-
-
+deacti

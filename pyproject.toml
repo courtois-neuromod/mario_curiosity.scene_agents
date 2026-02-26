@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mario_curiosity.scene_agents"
+version = "0.1"
+dependencies = [
+    "argparse",
+    "datetime",
+    "h5py",
+    "imageio",
+    "imageio-ffmpeg",
+    "invoke",
+    "joblib",
+    "numpy",
+    "opencv-python",
+    "pandas",
+    "pathlib",
+    "Pillow",
+    "pytorch-lightning",
+    "pytz",
+    "scikit-learn",
+    "scipy",
+    "six",
+    "src @ git+ssh://git@github.com/courtois-neuromod/ppo_study.git@main#egg=src",
+    "stable-retro",
+    "torch",
+    "tqdm",
+    "tqdm_joblib",
+    "videogames-utils @ git+https://github.com/courtois-neuromod/videogames_utils.git"
+    ]
+description = "Artificial agents to play scenes of Super Mario Bros. from human savestates."
+authors = [{name = "Hugo Delhaye"}]
+license = {text = "MIT"}
+
+[tool.setuptools.packages.find]
+where = ["code"]

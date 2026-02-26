@@ -24,5 +24,3 @@ joblib
 tqdm_joblib
 datetime
 scipy
-
-git+ssh://git@github.com/courtois-neuromod/ppo_study.git@main#egg=src

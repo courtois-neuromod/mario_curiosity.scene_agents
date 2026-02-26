@@ -1,4 +1,7 @@
-sourcedata/*
+sourcedata/mario*
+sourcedata/replays*
+sourcedata/scenes*
+sourcedata/models*
 env/*
 outputdata/*
 *.egg-info/
