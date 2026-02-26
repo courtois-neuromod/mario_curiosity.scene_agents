@@ -37,7 +37,7 @@ invoke get-scenes-data
 ## Get ROM folder
 
 ```
-invoke get-mario-game
+invoke setup-mario-game
 ```
 
 ## mario.replays

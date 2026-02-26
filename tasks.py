@@ -71,7 +71,7 @@ def get_scenes_data(c):
     )
 
 @task
-def setup_mario_dataset(c):
+def setup_mario_game(c):
     """📥 Download and configure the Mario dataset using datalad.
 
     Installs the Courtois NeuroMod Mario dataset including:
@@ -100,8 +100,7 @@ def setup_mario_dataset(c):
         "mkdir -p sourcedata && "
         "cd sourcedata && "
         "datalad install git@github.com:courtois-neuromod/mario.stimuli && "
-        "mv mario.stimuli stimuli && "
-        "cd stimuli && "
+        "cd mario.stimuli && "
         "git checkout scenes_states && "
         "datalad get ."
     )
