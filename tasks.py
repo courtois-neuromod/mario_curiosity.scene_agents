@@ -70,3 +70,40 @@ def get_scenes_data(c):
         'wget "https://zenodo.org/records/15586709/files/scenes_mastersheet.csv?download=1" -O sourcedata/scenes_info/scenes_mastersheet.csv'
     )
 
+@task
+def setup_mario_dataset(c):
+    """📥 Download and configure the Mario dataset using datalad.
+
+    Installs the Courtois NeuroMod Mario dataset including:
+    - Game ROM stimuli
+
+    The Game ROM is installed into sourcedata/mario/stimuli.
+
+    Parameters
+    ----------
+    c : invoke.Context
+        The Invoke context object.
+
+    Examples
+    --------
+    ```bash
+    invoke setup-mario-dataset
+    ```
+
+    Notes
+    -----
+    Requires datalad to be installed and SSH access to the Courtois NeuroMod
+    repositories.
+    """
+    command = (
+        f"source {BASE_DIR}/env/bin/activate && "
+        "mkdir -p sourcedata && "
+        "cd sourcedata && "
+        "datalad install git@github.com:courtois-neuromod/mario.stimuli && "
+        "mv mario.stimuli stimuli && "
+        "cd stimuli && "
+        "git checkout scenes_states && "
+        "datalad get ."
+    )
+    c.run(command)
+
