@@ -31,11 +31,12 @@ invoke setup-env will:
 To play with this repo you need the sourcedata. You can get them with the [mario.scenes](https://github.com/courtois-neuromod/mario.scenes) and [mario.replays](https://github.com/courtois-neuromod/mario.replays) repos, as well with the invoke functions. For the two repo, we recommende you to clone them outside of mario_curiosity.scene_agents
 
 ## Scenes data 
+Download scene metadata from Zenodo. All files are saved to sourcedata/scenes_info/. 
 ```
 invoke get-scenes-data
 ```
 ## Get ROM folder
-
+Download the Mario game using datalad. The Game ROM is installed into sourcedata/mario.stimuli/.
 ```
 invoke setup-mario-game
 ```

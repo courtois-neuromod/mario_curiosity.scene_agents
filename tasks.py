@@ -38,8 +38,6 @@ def get_scenes_data(c):
     - scenes_mastersheet.csv: Scene boundary definitions and layouts
     - scenes_mastersheet.json: Same data in JSON format
     - mario_scenes_manual_annotation.pdf: Annotation documentation
-    - level_backgrounds/: Background images for each level
-    - scene_backgrounds/: Background images for individual scenes
 
     All files are saved to sourcedata/scenes_info/ and sourcedata/*_backgrounds/.
 
