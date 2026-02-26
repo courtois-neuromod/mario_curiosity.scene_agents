@@ -1,10 +1,11 @@
 sourcedata/mario*
 sourcedata/replays*
 sourcedata/scenes*
+sourcedata*/
 sourcedata/models*
 env/*
 outputdata/*
 *.egg-info/
 *.egg
-
+code2/
 __pycache__/
