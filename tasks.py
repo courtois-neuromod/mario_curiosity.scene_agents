@@ -69,11 +69,13 @@ def get_scenes_data(c):
     )
 
 @task
-def setup_mario_game(c):
+def setup_mario_dataset(c):
     """📥 Download and configure the Mario dataset using datalad.
 
     Installs the Courtois NeuroMod Mario dataset including:
+    - Event timing .tsv files
     - Game ROM stimuli
+
 
     The Game ROM is installed into sourcedata/mario/stimuli.
 
@@ -94,13 +96,16 @@ def setup_mario_game(c):
     repositories.
     """
     command = (
-        f"source {BASE_DIR}/env/bin/activate && "
-        "mkdir -p sourcedata && "
-        "cd sourcedata && "
-        "datalad install git@github.com:courtois-neuromod/mario.stimuli && "
-        "cd mario.stimuli && "
-        "git checkout scenes_states && "
-        "datalad get ."
+            "mkdir -p sourcedata && "
+            "cd sourcedata && "
+            "datalad install git@github.com:courtois-neuromod/mario && "
+            "cd mario && "
+            "datalad get */*/*/*.tsv && "
+            "rm -rf stimuli && "
+            "datalad install git@github.com:courtois-neuromod/mario.stimuli && "
+            "mv mario.stimuli stimuli && "
+            "cd stimuli && "
+            "datalad get ."
     )
     c.run(command)
 
