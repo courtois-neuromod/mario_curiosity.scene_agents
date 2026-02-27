@@ -1,311 +1,332 @@
+#!/usr/bin/env python3
+"""
+main.py — Run PPO or imitation models on .state replays.
+
+Unified entry point for both model types. Loads models, replays each scene
+state through the emulator using the model's policy, and saves outputs
+(bk2, json, optional videos/variables).
+
+Usage
+-----
+    # PPO models
+    python code/main.py -sub sub-06 -ses ses-001 -l w1l1 -scn scene-1 -j 1
+
+    # Imitation models
+    python code/main.py --model-type imitation -sub sub-06 -ses ses-001 --device cpu -j 1
+"""
+
 import os
 import sys
-import h5py
-import numpy as np
 import argparse
+import numpy as np
 from pathlib import Path
+from datetime import datetime
 
+import torch
+from scipy.special import softmax
 from tqdm.auto import tqdm
 from joblib import Parallel, delayed
-from tqdm_joblib import tqdm_joblib  # Import from the official tqdm-joblib package
-import torch
-from datetime import datetime
-import os.path as op
-import json
-import pickle
-from scipy.special import softmax
-import retro
-import re
+from tqdm_joblib import tqdm_joblib
+
 from src.ppo.env import preprocess_frames, complex_movement_to_button_presses
-from src.ppo.emulation import add_unused_buttons
-from mario_replays.utils import reformat_info, make_mp4, make_gif, make_webp, create_sidecar_dict
-from load_data import get_mastersheet, get_models, parse_state_files, get_scene, get_xpos_max
+from src.models import ImitationModel
+
+from load_data import (
+    get_ppo_models, get_imitation_models,
+    parse_state_files, get_mastersheet, get_scene, get_xpos_max,
+)
 from utils import get_previous_frames, filter_states
+from emulation import (
+    setup_emulator, build_output_paths, run_emulation_loop,
+    save_metadata, save_optional_outputs,
+)
 
 sys.path.append(os.path.join(os.getcwd()))
 
-def process_single_state(row_state, ppo_row, info_scenes, args):
-    """Process a single state file with the given model."""
+RNG = np.random.default_rng(seed=1)
+
+
+# ---------------------------------------------------------------------------
+# Prediction callbacks
+# ---------------------------------------------------------------------------
+
+def make_ppo_predict_fn(model):
+    """Create a PPO prediction callback for the emulation loop.
+
+    Returns a function that takes context frames and returns button presses
+    via softmax sampling over the model's action logits.
+
+    Parameters
+    ----------
+    model : PPO
+        A loaded PPO model in eval mode.
+
+    Returns
+    -------
+    callable
+        predict_fn(context_frames) -> list[int]
+    """
+    def predict_fn(context_frames):
+        input_frames = np.stack([preprocess_frames(context_frames[-16:], 4, 4)])
+        frames_tensor = torch.tensor(input_frames, dtype=torch.float32, device=torch.device('cpu'))
+        logits = model(frames_tensor)[0].detach().cpu().numpy()
+        probs = softmax(logits, axis=1)
+        actions = [RNG.choice(np.arange(12), p=p) for p in probs]
+        actions = [complex_movement_to_button_presses(a) for a in actions]
+        return actions[0].tolist()
+    return predict_fn
+
+
+def make_imitation_predict_fn(model, best_thres, device):
+    """Create an imitation model prediction callback for the emulation loop.
+
+    Returns a function that preprocesses context frames, runs the model,
+    and binarizes predictions using per-button thresholds.
+
+    Parameters
+    ----------
+    model : ImitationModel
+        A loaded imitation model in eval mode.
+    best_thres : float or np.ndarray
+        Per-button threshold(s) for binarizing predictions.
+    device : torch.device
+        Device the model is on.
+
+    Returns
+    -------
+    callable
+        predict_fn(context_frames) -> list[int]
+    """
+    def predict_fn(context_frames):
+        try:
+            input_frames = np.stack([preprocess_frames(context_frames[-16:], 4, 4)])
+        except Exception as e:
+            print(f"Error preprocessing frames: {e}. Context length: {len(context_frames)}",
+                  file=sys.stdout, flush=True)
+            return [0] * 6  # safe fallback: no buttons pressed
+
+        frames_tensor = torch.tensor(input_frames, dtype=torch.float32, device=device)
+        with torch.no_grad():
+            preds = model(frames_tensor).detach().cpu().numpy()
+
+        actions_bool = preds > best_thres
+        return actions_bool[0].astype(int).tolist()
+
+    return predict_fn
+
+
+# ---------------------------------------------------------------------------
+# State processing
+# ---------------------------------------------------------------------------
+
+def process_single_state(row_state, model_row, info_scenes, args, model,
+                         predict_fn_factory):
+    """Process a single state file with the given model.
+
+    Parameters
+    ----------
+    row_state : dict-like
+        Row from the states DataFrame (must have state_path, sub, ses).
+    model_row : dict-like
+        Row from the models DataFrame (must have name_models).
+    info_scenes : pd.DataFrame
+        Scenes mastersheet.
+    args : argparse.Namespace
+        CLI arguments.
+    model : torch.nn.Module
+        The loaded model.
+    predict_fn_factory : callable
+        A function that returns a predict_fn for the emulation loop.
+    """
     state = row_state['state_path']
     sub = row_state['sub']
     ses = row_state['ses']
-    model = ppo_row['loaded_models']
     scene = get_scene(state)
     x_max = get_xpos_max(info_scenes, scene)
-    path_output = os.path.join(args.output, ppo_row['name_models'].split('.')[0], sub, ses, 'beh')
-    
-    return process_state(state, args, model, x_max, path_output, args.stimuli, verbose=args.verbose)
+    path_output = os.path.join(
+        args.output, model_row['name_models'].split('.')[0], sub, ses, 'beh'
+    )
+
+    # For imitation models, only process states matching the model's subject
+    if args.model_type == 'imitation' and sub not in model_row['name_models']:
+        return None
+
+    return _run_state(state, args, model, predict_fn_factory, x_max, path_output)
 
 
-def process_state(state_path, args, ppo, x_max, path_output, stimuli, verbose=False):
-
+def _run_state(state_path, args, model, predict_fn_factory, x_max, path_output):
+    """Run a model on a single .state file and save outputs."""
     entities = state_path.split('/')[-1].split('.')[0]
-    beh_folder = path_output
-    # Prepare output filenames
-    gif_fname       = op.join(beh_folder, 'videos', f"{entities}.gif")
-    mp4_fname       = op.join(beh_folder, 'videos', f"{entities}.mp4")
-    webp_fname      = op.join(beh_folder, 'videos', f"{entities}.webp")
-    savestate_fname = op.join(beh_folder, 'savestates', f"{entities}.state")
-    ramdump_fname   = op.join(beh_folder, 'ramdumps', f'{entities}.npz')
-    json_fname      = op.join(beh_folder, 'infos', f"{entities}.json")
-    variables_fname = op.join(beh_folder, 'variables', f"{entities}.json")
-    bk2_fname       = op.join(beh_folder, 'bk2', f"{entities}.bk2")
-    os.makedirs(os.path.dirname(bk2_fname), exist_ok=True)
+    paths = build_output_paths(path_output, entities)
+    os.makedirs(os.path.dirname(paths['bk2']), exist_ok=True)
 
-    # Setup the environments with Mario
-    resolved_path = Path(stimuli).resolve()
-    retro.data.Integrations.add_custom_path(resolved_path)
-    
-    emul = retro.make(game='SuperMarioBros-Nes', 
-                      inttype=retro.data.Integrations.CUSTOM_ONLY, 
-                      record=op.join(beh_folder, 'bk2'),
-                      render_mode=False)
-    emul.load_state(state_path)
-    emul.reset()
+    emul = setup_emulator(state_path, args.stimuli, os.path.join(path_output, 'bk2'))
     context_frames = get_previous_frames(state_path, args)
+    predict_fn = predict_fn_factory(model)
 
-    rng = np.random.default_rng(seed=1)
-    pred_rate = 4
-    n_frames = 0
-    done = False
-    frames_list = []
-    info_list = []
-    keys_list = []
+    frames_list, info_list, keys_list, buttons, n_frames = run_emulation_loop(
+        emul, predict_fn, context_frames, x_max, verbose=args.verbose
+    )
 
-    while not done:
-        # Predict new actions
-        if not n_frames % pred_rate:
-            contexts_frames = [
-                preprocess_frames(context_frames[-16:], 4, 4)
-                    ]
+    scene_variables = save_metadata(
+        paths, state_path, path_output, emul.gamename, n_frames,
+        info_list, keys_list, buttons
+    )
+    save_optional_outputs(paths, args, frames_list, scene_variables)
 
-            input_frames = np.stack(contexts_frames)
-            frames_input = torch.tensor(
-                    input_frames, dtype=torch.float32, device=torch.device('cpu')
-               )
-            logits = ppo(frames_input)[0].detach().cpu().numpy()
-            probs = softmax(logits, axis=1)
-            actions = [rng.choice(np.arange(12), p=p) for p in probs]
-            actions = [complex_movement_to_button_presses(a) for a in actions]
-
-            if verbose:
-                print("Actions : ", actions)
-            act = actions[0].tolist()
-
-        keys = add_unused_buttons(act)
-        obs, _rew, _term, _trunc, info = emul.step(keys)
-        frames_list.append(obs)
-        info_list.append(info)
-        keys_list.append(keys)
-        buttons = emul.buttons
+    return {"entities": entities, "frames": n_frames, "json": paths['json'], "bk2": paths['bk2']}
 
 
-        if n_frames == 0:
-            lives = info['lives']
-            level_layout = info['level_layout']
-
-        context_frames.append(obs)
-        done = _term
-        xscroll = 255 * int(info["player_x_posHi"]) + int(info["player_x_posLo"])
-        new_layout = info["level_layout"]
-        new_lives = info['lives']
-
-        if ( xscroll > x_max
-            or new_lives != lives
-            or new_layout != level_layout
-            or _trunc or _term
-            ):
-                done = True
-                
-        n_frames += 1
-
-    scene_variables = reformat_info(info_list, keys_list, bk2_fname, buttons)
-
-    # Generate json
-    metadata = {
-                    'Model': path_output.split('/')[-4],
-                    'StateFileName': '/'.join(state_path.split('/')[-6:]),
-                    'LevelFullName': state_path.split('/')[-1].split('_')[-3].split('-')[1],
-                    'Scene': state_path.split('/')[-1].split('_')[-2].split('-')[1],
-                    'StateClipCode': state_path.split('/')[-1].split('_')[-1].split('-')[1].split('.')[0],
-                    'TotalFrames': n_frames,
-                    'Bk2Filepath': '/'.join(bk2_fname.split('/')[-6:]),
-                    'GameName': emul.gamename,
-                }
-    scene_sidecar = create_sidecar_dict(scene_variables)
-    enriched_metadata = metadata.copy()
-    enriched_metadata.update(scene_sidecar)
-    os.makedirs(os.path.dirname(json_fname), exist_ok=True)
-
-    with open(json_fname, 'w') as json_file:    
-        json.dump(enriched_metadata, json_file)
-
-    # Generate files
-    if args.save_videos:
-        os.makedirs(os.path.dirname(gif_fname), exist_ok=True)
-        if args.video_format == 'gif':
-            make_gif(frames_list, gif_fname)
-        elif args.video_format == 'mp4':
-            make_mp4(frames_list, mp4_fname)
-        elif args.video_format == 'webp':
-            make_webp(frames_list, webp_fname)
-    if args.save_ramdumps:
-        os.makedirs(os.path.dirname(ramdump_fname), exist_ok=True)
-        #np.savez_compressed(ramdump_fname, replay_states[start_idx:end_idx])
-    if args.save_variables:
-        os.makedirs(os.path.dirname(variables_fname), exist_ok=True)
-        with open(variables_fname, 'w') as f:  # Changed 'wb' to 'w' for text mode
-            json.dump(scene_variables, f)
-    
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 def main(args):
+    """Load models and states, then process all combinations in parallel."""
+    device = torch.device(args.device if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
 
-    now = datetime.now()
+    # Load models based on type
+    if args.model_type == 'ppo':
+        models_df = get_ppo_models(args.models, device=str(device))
+    else:
+        models_df = get_imitation_models(args.models, device=str(device))
 
-    # Conversion en string
-    date_str = now.strftime("%Y-%m-%d_%H:%M-%S")
-
-    models_ppo = get_models(args.models)
-    states = parse_state_files(Path(args.clipspath).resolve())   
+    states = parse_state_files(Path(args.clipspath).resolve())
+    print(f"Found {len(models_df)} models and {len(states)} states.")
 
     filters = {
         'sub': args.subjects,
         'ses': args.sessions,
         'level': args.levels,
-        'scene': args.scenes
+        'scene': args.scenes,
     }
-
     filtered_states = filter_states(states, filters)
     info_scenes = get_mastersheet(args.mastersheet)
 
-    for i, ppo_row in tqdm(models_ppo.iterrows()):
-        # Get all states to process with current model
-        states_to_process = [(y, row_state) for y, row_state in sorted(filtered_states.iterrows())]
-        
-        if args.verbose:
-            print(f"Processing {len(states_to_process)} states with model {ppo_row['name_models']}")
-        
-        # Create a progress bar description
-        desc = f"Processing model {ppo_row['name_models']}"
-        
-        # Use tqdm_joblib to create a progress bar for parallel processing
-        with tqdm_joblib(tqdm(total=len(states_to_process), desc=desc, disable=not args.verbose)) as progress_bar:
-            results = Parallel(n_jobs=args.n_jobs)(
-                delayed(process_single_state)(row_state, ppo_row, info_scenes, args) 
+    for _, model_row in tqdm(models_df.iterrows(), desc="models"):
+        model = model_row['loaded_models']
+
+        # For imitation, reload checkpoint to the right device
+        if args.model_type == 'imitation':
+            model_path = model_row['path_models']
+            try:
+                print(f"Loading model from {model_path}")
+                model = ImitationModel.load_from_checkpoint(
+                    model_path, map_location=device, weights_only=False
+                )
+                model.eval().to(device)
+                torch.set_grad_enabled(False)
+            except Exception as e:
+                print(f"Failed to load model {model_path}: {e}")
+                continue
+
+        # Build the predict function factory
+        if args.model_type == 'ppo':
+            predict_fn_factory = make_ppo_predict_fn
+        else:
+            best_thres = model_row.get('best_thres')
+            predict_fn_factory = lambda m: make_imitation_predict_fn(m, best_thres, device)
+
+        states_to_process = [(y, row) for y, row in sorted(filtered_states.iterrows())]
+        print(f"Processing {len(states_to_process)} states with model {model_row['name_models']}")
+
+        desc = f"Processing model {model_row['name_models']}"
+        with tqdm_joblib(tqdm(total=len(states_to_process), desc=desc, disable=not args.verbose)):
+            Parallel(n_jobs=args.n_jobs)(
+                delayed(process_single_state)(
+                    row_state, model_row, info_scenes, args, model, predict_fn_factory
+                )
                 for _, row_state in states_to_process
             )
 
+    print("All done.")
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def _default_models_path(model_type):
+    """Return the default models path for the given model type."""
+    return os.path.join('sourcedata', 'models', model_type)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Extract .state files from Mario dataset and information about the scenes")
-    parser.add_argument(
-        "-cp",
-        "--clipspath",
-        default=os.path.join('sourcedata', 'scene_clips'),
-        type=str,
-        help="Data path to look for the .state files and .mp4. Should contain replays/ (for .mp4) and scene_clips (for .state)",
+    parser = argparse.ArgumentParser(
+        description="Run PPO or imitation models on .state replays and save outputs.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Run PPO models on a specific subject/session/level/scene
+  python code/main.py -sub sub-06 -ses ses-001 -l w1l1 -scn scene-1 -j 1
+
+  # Run imitation models on CPU
+  python code/main.py --model-type imitation -sub sub-06 -ses ses-001 --device cpu -j 1
+
+  # Run with videos saved as webp
+  python code/main.py -sub sub-06 --save_videos --video_format webp
+        """,
     )
-    parser.add_argument(
-        "-rp",
-        "--replayspath",
-        default=os.path.join('sourcedata', 'replays'),
-        type=str,
-        help="Data path to look for the .state files and .mp4. Should contain replays/ (for .mp4) and scene_clips (for .state)",
-    )
-    parser.add_argument(
-        "-md",
-        "--models",
-        default= os.path.join('sourcedata', 'models'),
-        type=str,
-        help="Path to the models folder, where the PPO models are stored.",
-    )
-    parser.add_argument(
-        "-ms",
-        "--mastersheet",
-        default= os.path.join('sourcedata', 'scenes_mastersheet.csv'),
-        type=str,
-        help="Path to the mastersheet.",
-    )
-    parser.add_argument(
-        "-o",
-        "--output",
-        default='outputdata/',
-        type=str,
-        help="Path to the derivatives folder, where the outputs will be saved.",
-    )
-    parser.add_argument(
-        "-st",
-        "--stimuli",
-        default=None,
-        type=str,
-        help="Path to the stimuli folder containing the game ROMs. Defaults to <datapath>/stimuli if not specified.",
-    )
-    parser.add_argument( 
-        '-sub',
-        '--subjects',
-        nargs='+',
-        default=None,
-        help='List of subjects to process (e.g., sub-01 sub-02). If not specified, all subjects are processed.'
-    )
-    parser.add_argument( 
-        '-ses',
-        '--sessions',
-        nargs='+', 
-        default=None,
-        help='List of sessions to process (e.g., ses-001 ses-002). If not specified, all sessions are processed.'
-    )
-    parser.add_argument( 
-        '-l', 
-        '--levels',
-        nargs='+', 
-        default=None,
-        help='List of levels to process (e.g., w1l1 w1l2). If not specified, all sessions are processed.'
-    )
-    parser.add_argument( 
-        '-scn',
-        '--scenes',
-        nargs='+', 
-        default=None,
-        help='List of scenes to process (e.g., scene-1 scene-2). If not specified, all sessions are processed.'
-    )
-    parser.add_argument(
-        '-v',
-        '--verbose',
-        action='store_true',
-        help='Enable verbose output.'
-    )
-    parser.add_argument(
-        '-j',
-        '--n_jobs',
-        type=int,
-        default=-1,
-        help='Number of parallel jobs. Default is -1 (use all available cores).'
-    )
-    parser.add_argument(
-        "--save_videos",
-        action="store_true",
-        help="Save the playback video file (.mp4).",
-    )
-    parser.add_argument(
-        "--save_variables",
-        action="store_true",
-        help="Save the variables file (.npz) that contains game variables.",
-    )
-    parser.add_argument(
-        "--save_states",
-        action="store_true",
-        help="Save full RAM state at each frame into a *_states.npy file.",
-    )
-    parser.add_argument(
-        "--save_ramdumps",
-        action="store_true",
-        help="Save RAM dumps at each frame into a *_ramdumps.npy file.",
-    )
-    parser.add_argument(
-        '--video_format', '-vf', default='mp4',
-        choices=['gif', 'mp4', 'webp'],
-        help='Video format to save (default: mp4).'
-    )
+
+    # Model type
+    parser.add_argument("--model-type", "-mt", default="ppo",
+                        choices=["ppo", "imitation"],
+                        help="Type of model to run (default: ppo).")
+
+    # Paths
+    parser.add_argument("-cp", "--clipspath",
+                        default=os.path.join('sourcedata', 'scene_clips'),
+                        help="Path to scene_clips directory (.state files).")
+    parser.add_argument("-rp", "--replayspath",
+                        default=os.path.join('sourcedata', 'replays'),
+                        help="Path to replays directory (.mp4 files).")
+    parser.add_argument("-md", "--models", default=None,
+                        help="Path to models directory. Defaults to sourcedata/models/<model-type>/.")
+    parser.add_argument("-ms", "--mastersheet",
+                        default=os.path.join('sourcedata', 'scenes_info', 'scenes_mastersheet.csv'),
+                        help="Path to the scenes mastersheet (CSV or Excel).")
+    parser.add_argument("-o", "--output", default="outputdata/",
+                        help="Output directory for results.")
+    parser.add_argument("-st", "--stimuli",
+                        default=os.path.join('sourcedata', 'mario', 'stimuli'),
+                        help="Path to the stimuli folder (game ROMs).")
+
+    # Filters
+    parser.add_argument('-sub', '--subjects', nargs='+', default=None,
+                        help='Subjects to process (e.g., sub-01 sub-02).')
+    parser.add_argument('-ses', '--sessions', nargs='+', default=None,
+                        help='Sessions to process (e.g., ses-001 ses-002).')
+    parser.add_argument('-l', '--levels', nargs='+', default=None,
+                        help='Levels to process (e.g., w1l1 w1l2).')
+    parser.add_argument('-scn', '--scenes', nargs='+', default=None,
+                        help='Scenes to process (e.g., scene-1 scene-2).')
+
+    # Execution
+    parser.add_argument('-v', '--verbose', action='store_true',
+                        help='Enable verbose output.')
+    parser.add_argument('-j', '--n_jobs', type=int, default=-1,
+                        help='Number of parallel jobs (-1 = all cores).')
+    parser.add_argument("--device", default="cpu",
+                        help="Device for model inference (cpu or cuda).")
+
+    # Output options
+    parser.add_argument("--save_videos", action="store_true",
+                        help="Save playback videos.")
+    parser.add_argument("--save_variables", action="store_true",
+                        help="Save game variables as JSON.")
+    parser.add_argument("--save_states", action="store_true",
+                        help="Save full RAM states.")
+    parser.add_argument("--save_ramdumps", action="store_true",
+                        help="Save RAM dumps.")
+    parser.add_argument('--video_format', '-vf', default='mp4',
+                        choices=['gif', 'mp4', 'webp'],
+                        help='Video format (default: mp4).')
+
     args = parser.parse_args()
+
+    # Set default models path based on model type if not provided
+    if args.models is None:
+        args.models = _default_models_path(args.model_type)
+
     main(args)

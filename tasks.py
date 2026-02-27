@@ -100,12 +100,88 @@ def setup_mario_dataset(c):
             "cd sourcedata && "
             "datalad install git@github.com:courtois-neuromod/mario && "
             "cd mario && "
+            "git checkout events && "
             "datalad get */*/*/*.tsv && "
             "rm -rf stimuli && "
             "datalad install git@github.com:courtois-neuromod/mario.stimuli && "
             "mv mario.stimuli stimuli && "
             "cd stimuli && "
+            "git checkout scenes_states && "
             "datalad get ."
     )
     c.run(command)
+
+
+@task(
+    help={
+        "model_type": "Model type: 'ppo' or 'imitation' (default: ppo).",
+        "subjects": "Space-separated subjects, e.g. 'sub-01 sub-06'.",
+        "sessions": "Space-separated sessions, e.g. 'ses-001 ses-002'.",
+        "levels": "Space-separated levels, e.g. 'w1l1 w1l2'.",
+        "scenes": "Space-separated scenes, e.g. 'scene-1 scene-2'.",
+        "n_jobs": "Number of parallel jobs (-1 = all cores, default: -1).",
+        "device": "Device for inference: 'cpu' or 'cuda' (default: cpu).",
+        "verbose": "Enable verbose output.",
+        "save_videos": "Save playback videos.",
+        "save_variables": "Save game variables as JSON.",
+        "video_format": "Video format: gif, mp4, or webp (default: mp4).",
+    }
+)
+def run_agents(
+    c,
+    model_type="ppo",
+    subjects=None,
+    sessions=None,
+    levels=None,
+    scenes=None,
+    n_jobs=-1,
+    device="cpu",
+    verbose=False,
+    save_videos=False,
+    save_variables=False,
+    video_format="mp4",
+):
+    """🎮 Run artificial agents on scene savestates.
+
+    Replays scene .state files through the emulator using the specified model
+    type (PPO or imitation) and saves outputs (bk2, json, optional videos).
+
+    Examples
+    --------
+    ```bash
+    # PPO on specific subject/session
+    invoke run-agents --subjects "sub-06" --sessions "ses-001" --levels "w1l1" --scenes "scene-1"
+
+    # Imitation models on CPU
+    invoke run-agents --model-type imitation --subjects "sub-06" --sessions "ses-001" --device cpu
+
+    # With videos
+    invoke run-agents --subjects "sub-06" --save-videos --video-format webp
+    ```
+    """
+    cmd = (
+        f"source {BASE_DIR}/env/bin/activate && "
+        f"python {BASE_DIR}/code/main.py "
+        f"--model-type {model_type} "
+        f"--device {device} "
+        f"-j {n_jobs} "
+        f"--video_format {video_format}"
+    )
+
+    if subjects:
+        cmd += f" -sub {subjects}"
+    if sessions:
+        cmd += f" -ses {sessions}"
+    if levels:
+        cmd += f" -l {levels}"
+    if scenes:
+        cmd += f" -scn {scenes}"
+    if verbose:
+        cmd += " -v"
+    if save_videos:
+        cmd += " --save_videos"
+    if save_variables:
+        cmd += " --save_variables"
+
+    c.run(cmd)
 

@@ -55,3 +55,40 @@ Form the [mario.scenes](https://github.com/courtois-neuromod/mario.scenes) repos
 invoke create-clips --save-states --output <path_to_mario_curiosity.scene_agents_sourcedata/>
 ```
 The `--ouput` path should point to sourcedata/scene_clips/.
+
+# Run agents
+
+Use the `run-agents` invoke task to replay scene savestates with artificial agents (PPO or imitation models).
+
+## Basic usage
+```bash
+# Run PPO agents on a specific subject and session
+invoke run-agents --subjects "sub-06" --sessions "ses-001"
+
+# Run imitation agents
+invoke run-agents --model-type imitation --subjects "sub-06" --sessions "ses-001"
+
+# Filter by level and scene
+invoke run-agents --subjects "sub-06" --sessions "ses-001" --levels "w1l1" --scenes "scene-1"
+
+# Save playback videos as webp
+invoke run-agents --subjects "sub-06" --save-videos --video-format webp
+```
+
+## Arguments
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--model-type` | `ppo` | Model type: `ppo` or `imitation` |
+| `--subjects` | all | Space-separated subjects (e.g., `"sub-01 sub-06"`) |
+| `--sessions` | all | Space-separated sessions (e.g., `"ses-001 ses-002"`) |
+| `--levels` | all | Space-separated levels (e.g., `"w1l1 w1l2"`) |
+| `--scenes` | all | Space-separated scenes (e.g., `"scene-1 scene-2"`) |
+| `--n-jobs` | `-1` | Number of parallel jobs (`-1` = all cores) |
+| `--device` | `cpu` | Device for inference (`cpu` or `cuda`) |
+| `--verbose` | off | Enable verbose output |
+| `--save-videos` | off | Save playback videos |
+| `--save-variables` | off | Save game variables as JSON |
+| `--video-format` | `mp4` | Video format: `gif`, `mp4`, or `webp` |
+
+Outputs are saved to `outputdata/<model_name>/<subject>/<session>/beh/` with subdirectories for `bk2/` (replay files), `infos/` (JSON metadata), and optionally `videos/` and `variables/`.
